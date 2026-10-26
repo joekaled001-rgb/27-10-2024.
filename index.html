@@ -68,19 +68,16 @@
                         clearInterval(checkFirebase);
                         const { db, collection, onSnapshot, query, orderBy } = window.firebaseDb;
 
-                        // Escuchar Cartas en vivo
                         onSnapshot(query(collection(db, 'letters'), orderBy('createdAt', 'desc')), (snapshot) => {
                             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                            if(docs.length > 0) setLetters(docs);
+                            setLetters(docs);
                         });
 
-                        // Escuchar Álbum en vivo
                         onSnapshot(query(collection(db, 'album'), orderBy('createdAt', 'desc')), (snapshot) => {
                             const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                             setAlbumItems(docs);
                         });
 
-                        // Escuchar Calendario en vivo
                         onSnapshot(collection(db, 'calendar'), (snapshot) => {
                             const calMap = {};
                             snapshot.docs.forEach(doc => {
@@ -93,7 +90,7 @@
             }, []);
 
             // Contador de aniversario
-            const anniversaryDate = new Date(2024, 9, 27); // 27 de octubre de 2024
+            const anniversaryDate = new Date(2024, 9, 27);
             const now = new Date();
             let years = now.getFullYear() - anniversaryDate.getFullYear();
             let months = now.getMonth() - anniversaryDate.getMonth();
@@ -153,7 +150,6 @@
 
             return (
                 <div className="min-h-screen bg-[#FAF7F2] text-[#0F2B48] pb-12">
-                    {/* Barra superior */}
                     <header className="border-b border-[#0F2B48]/10 bg-[#FAF7F2]/80 backdrop-blur sticky top-0 z-40 px-6 py-4 flex justify-between items-center max-w-5xl mx-auto">
                         <span className="serif-title text-xl font-bold">Nuestro Aniversario</span>
                         <div className="flex items-center space-x-4">
@@ -165,7 +161,6 @@
                         </div>
                     </header>
 
-                    {/* Contenido Principal */}
                     <main className="max-w-4xl mx-auto px-4 pt-8 space-y-10">
                         <div className="space-y-2">
                             <p className="text-xs uppercase tracking-widest text-[#0F2B48]/60 font-semibold">Un lugar para nosotros</p>
@@ -173,7 +168,6 @@
                             <p className="text-[#0F2B48]/70 text-sm md:text-base">Un lugar para guardar lo que compartimos: palabras, fotos y esos días que se vuelven inolvidables.</p>
                         </div>
 
-                        {/* Contador */}
                         <div className="bg-[#0F2B48] text-[#FAF7F2] p-8 rounded-3xl shadow-lg relative overflow-hidden">
                             <p className="text-xs uppercase tracking-widest opacity-80 mb-1">Desde el primer día</p>
                             <h2 className="serif-title text-2xl md:text-3xl font-bold mb-4">27 de octubre de 2024</h2>
@@ -182,7 +176,6 @@
                             </div>
                         </div>
 
-                        {/* Cartas */}
                         <section className="bg-[#F4EFE6] p-6 md:p-8 rounded-3xl border border-[#0F2B48]/10 space-y-6">
                             <div className="flex justify-between items-center">
                                 <div>
@@ -194,19 +187,22 @@
                                 </button>
                             </div>
                             <div className="space-y-4">
-                                {letters.map((l) => (
-                                    <div key={l.id} className="bg-white/80 p-5 rounded-2xl border border-[#0F2B48]/10 space-y-2">
-                                        <div className="flex justify-between items-start">
-                                            <h4 className="serif-title text-xl font-bold">{l.title}</h4>
-                                            <span className="text-xs text-[#0F2B48]/60">{l.date} ({l.author})</span>
+                                {letters.length === 0 ? (
+                                    <p className="text-sm text-[#0F2B48]/60 italic">Aún no hay cartas escritas. ¡Escribe la primera!</p>
+                                ) : (
+                                    letters.map((l) => (
+                                        <div key={l.id} className="bg-white/80 p-5 rounded-2xl border border-[#0F2B48]/10 space-y-2">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className="serif-title text-xl font-bold">{l.title}</h4>
+                                                <span className="text-xs text-[#0F2B48]/60">{l.date} ({l.author})</span>
+                                            </div>
+                                            <p className="text-sm text-[#0F2B48]/80 leading-relaxed">{l.content}</p>
                                         </div>
-                                        <p className="text-sm text-[#0F2B48]/80 leading-relaxed">{l.content}</p>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </section>
 
-                        {/* Álbum */}
                         <section className="bg-[#F4EFE6] p-6 md:p-8 rounded-3xl border border-[#0F2B48]/10 space-y-6">
                             <div className="flex justify-between items-center">
                                 <div>
@@ -231,7 +227,6 @@
                             )}
                         </section>
 
-                        {/* Calendario con Notas */}
                         <section className="bg-[#F4EFE6] p-6 md:p-8 rounded-3xl border border-[#0F2B48]/10 space-y-6">
                             <div>
                                 <p className="text-xs uppercase tracking-widest text-[#0F2B48]/60 font-semibold">Días con historia</p>
@@ -263,7 +258,6 @@
                         </section>
                     </main>
 
-                    {/* Modal Carta */}
                     {showLetterModal && (
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
@@ -291,7 +285,6 @@
                         </div>
                     )}
 
-                    {/* Modal Álbum */}
                     {showAlbumModal && (
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
@@ -319,7 +312,6 @@
                         </div>
                     )}
 
-                    {/* Modal Calendario */}
                     {showCalendarModal && (
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
