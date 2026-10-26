@@ -16,6 +16,27 @@
 </head>
 <body>
     <div id="root"></div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCDNuzmGDwINJ0SELOqNSSW7GUsYXkZdNY",
+            authDomain: "nuestroaniversario-21740.firebaseapp.com",
+            projectId: "nuestroaniversario-21740",
+            storageBucket: "nuestroaniversario-21740.firebasestorage.app",
+            messagingSenderId: "1089346395068",
+            appId: "1:1089346395068:web:0b384f4ef4c48d526029b9",
+            measurementId: "G-4B0QG172W0"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        window.firebaseDb = { db, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, query, orderBy };
+    </script>
+
     <script type="text/babel">
         function App() {
             const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -23,32 +44,11 @@
             const [savedPin, setSavedPin] = React.useState(() => localStorage.getItem('anniversary_pin') || '');
             const [pinError, setPinError] = React.useState('');
             const [currentUser, setCurrentUser] = React.useState('Él');
-            const [activeTab, setActiveTab] = React.useState('home');
             
-            // Estados con persistencia local
-            const [letters, setLetters] = React.useState(() => {
-                const saved = localStorage.getItem('anniversary_letters');
-                return saved ? JSON.parse(saved) : [
-                    { id: 1, title: 'Para el amor de mi vida', content: 'Feliz aniversario. Este espacio digital está hecho para guardar cada palabra...', author: 'Él', date: '25 de octubre de 2026' }
-                ];
-            });
+            const [letters, setLetters] = React.useState([]);
+            const [albumItems, setAlbumItems] = React.useState([]);
+            const [calendarEntries, setCalendarEntries] = React.useState({});
 
-            const [albumItems, setAlbumItems] = React.useState(() => {
-                const saved = localStorage.getItem('anniversary_album');
-                return saved ? JSON.parse(saved) : [];
-            });
-
-            const [calendarEntries, setCalendarEntries] = React.useState(() => {
-                const saved = localStorage.getItem('anniversary_calendar');
-                return saved ? JSON.parse(saved) : {};
-            });
-
-            // Guardar cambios en localStorage automáticamente
-            React.useEffect(() => { localStorage.setItem('anniversary_letters', JSON.stringify(letters)); }, [letters]);
-            React.useEffect(() => { localStorage.setItem('anniversary_album', JSON.stringify(albumItems)); }, [albumItems]);
-            React.useEffect(() => { localStorage.setItem('anniversary_calendar', JSON.stringify(calendarEntries)); }, [calendarEntries]);
-
-            // Estados de modales
             const [showLetterModal, setShowLetterModal] = React.useState(false);
             const [newLetterTitle, setNewLetterTitle] = React.useState('');
             const [newLetterContent, setNewLetterContent] = React.useState('');
@@ -60,6 +60,37 @@
             const [showCalendarModal, setShowCalendarModal] = React.useState(false);
             const [selectedDateStr, setSelectedDateStr] = React.useState('');
             const [calendarNoteInput, setCalendarNoteInput] = React.useState('');
+
+            // Sincronización en tiempo real con Firebase Firestore
+            React.useEffect(() => {
+                const checkFirebase = setInterval(() => {
+                    if (window.firebaseDb) {
+                        clearInterval(checkFirebase);
+                        const { db, collection, onSnapshot, query, orderBy } = window.firebaseDb;
+
+                        // Escuchar Cartas en vivo
+                        onSnapshot(query(collection(db, 'letters'), orderBy('createdAt', 'desc')), (snapshot) => {
+                            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            if(docs.length > 0) setLetters(docs);
+                        });
+
+                        // Escuchar Álbum en vivo
+                        onSnapshot(query(collection(db, 'album'), orderBy('createdAt', 'desc')), (snapshot) => {
+                            const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            setAlbumItems(docs);
+                        });
+
+                        // Escuchar Calendario en vivo
+                        onSnapshot(collection(db, 'calendar'), (snapshot) => {
+                            const calMap = {};
+                            snapshot.docs.forEach(doc => {
+                                calMap[doc.id] = doc.data().note;
+                            });
+                            setCalendarEntries(calMap);
+                        });
+                    }
+                }, 200);
+            }, []);
 
             // Contador de aniversario
             const anniversaryDate = new Date(2024, 9, 27); // 27 de octubre de 2024
@@ -84,14 +115,11 @@
                 }
             };
 
-            // Convertir archivo local a Base64
             const handleImageUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) {
                     const reader = new FileReader();
-                    reader.onloadend = () => {
-                        setNewMediaImage(reader.result);
-                    };
+                    reader.onloadend = () => { setNewMediaImage(reader.result); };
                     reader.readAsDataURL(file);
                 }
             };
@@ -182,7 +210,7 @@
                         <section className="bg-[#F4EFE6] p-6 md:p-8 rounded-3xl border border-[#0F2B48]/10 space-y-6">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <p className="text-xs uppercase tracking-widest text-[#0F2B48]/60 font-semibold">Instantes que vuelven (tenemos que empezar a tomarnos fotos)</p>
+                                    <p className="text-xs uppercase tracking-widest text-[#0F2B48]/60 font-semibold">Instantes que vuelven</p>
                                     <h3 className="serif-title text-2xl font-bold">Álbum</h3>
                                 </div>
                                 <button onClick={() => setShowAlbumModal(true)} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl font-medium">
@@ -240,13 +268,20 @@
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
                                 <h3 className="serif-title text-2xl font-bold">Escribir carta</h3>
-                                <input type="text" placeholder="Título" id="lTitle" value={newLetterTitle} onChange={e=>setNewLetterTitle(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20" />
-                                <textarea placeholder="Escribe tu mensaje aquí..." id="lContent" rows="4" value={newLetterContent} onChange={e=>setNewLetterContent(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20"></textarea>
+                                <input type="text" placeholder="Título" value={newLetterTitle} onChange={e=>setNewLetterTitle(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20" />
+                                <textarea placeholder="Escribe tu mensaje aquí..." rows="4" value={newLetterContent} onChange={e=>setNewLetterContent(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20"></textarea>
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowLetterModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={() => {
-                                        if(newLetterTitle && newLetterContent) {
-                                            setLetters([{id: Date.now(), title: newLetterTitle, content: newLetterContent, author: currentUser, date: new Date().toLocaleDateString()}, ...letters]);
+                                    <button onClick={async () => {
+                                        if(newLetterTitle && newLetterContent && window.firebaseDb) {
+                                            const { db, collection, addDoc } = window.firebaseDb;
+                                            await addDoc(collection(db, 'letters'), {
+                                                title: newLetterTitle,
+                                                content: newLetterContent,
+                                                author: currentUser,
+                                                date: new Date().toLocaleDateString(),
+                                                createdAt: Date.now()
+                                            });
                                             setNewLetterTitle(''); setNewLetterContent('');
                                             setShowLetterModal(false);
                                         }
@@ -256,7 +291,7 @@
                         </div>
                     )}
 
-                    {/* Modal Álbum (Subir desde archivo local del celu) */}
+                    {/* Modal Álbum */}
                     {showAlbumModal && (
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
@@ -266,9 +301,15 @@
                                 <input type="text" placeholder="Descripción breve" value={newMediaCaption} onChange={e=>setNewMediaCaption(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20 text-sm" />
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowAlbumModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={() => {
-                                        if(newMediaImage) {
-                                            setAlbumItems([{id: Date.now(), url: newMediaImage, caption: newMediaCaption || 'Un gran recuerdo', author: currentUser}, ...albumItems]);
+                                    <button onClick={async () => {
+                                        if(newMediaImage && window.firebaseDb) {
+                                            const { db, collection, addDoc } = window.firebaseDb;
+                                            await addDoc(collection(db, 'album'), {
+                                                url: newMediaImage,
+                                                caption: newMediaCaption || 'Un gran recuerdo',
+                                                author: currentUser,
+                                                createdAt: Date.now()
+                                            });
                                             setNewMediaImage(''); setNewMediaCaption('');
                                             setShowAlbumModal(false);
                                         }
@@ -278,7 +319,7 @@
                         </div>
                     )}
 
-                    {/* Modal Calendario (Solo notas) */}
+                    {/* Modal Calendario */}
                     {showCalendarModal && (
                         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                             <div className="bg-[#FAF7F2] p-6 rounded-3xl max-w-md w-full space-y-4">
@@ -286,15 +327,17 @@
                                 <textarea placeholder="¿Qué pasó este día?" rows="3" value={calendarNoteInput} onChange={e=>setCalendarNoteInput(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/25 text-sm"></textarea>
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowCalendarModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={() => {
-                                        const updated = {...calendarEntries};
-                                        if(calendarNoteInput.trim()) {
-                                            updated[selectedDateStr] = calendarNoteInput;
-                                        } else {
-                                            delete updated[selectedDateStr];
+                                    <button onClick={async () => {
+                                        if(window.firebaseDb) {
+                                            const { db, doc, setDoc, deleteDoc } = window.firebaseDb;
+                                            const docRef = doc(db, 'calendar', selectedDateStr);
+                                            if(calendarNoteInput.trim()) {
+                                                await setDoc(docRef, { note: calendarNoteInput });
+                                            } else {
+                                                await deleteDoc(docRef);
+                                            }
+                                            setShowCalendarModal(false);
                                         }
-                                        setCalendarEntries(updated);
-                                        setShowCalendarModal(false);
                                     }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl">Guardar nota</button>
                                 </div>
                             </div>
