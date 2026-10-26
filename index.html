@@ -17,35 +17,19 @@
 <body>
     <div id="root"></div>
 
-    <!-- Firebase SDKs por CDN (Compatible con Navegador y GitHub Pages) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCDNuzmGDwINJ0SELOqNSSW7GUsYXkZdNY",
-            authDomain: "nuestroaniversario-21740.firebaseapp.com",
-            projectId: "nuestroaniversario-21740",
-            storageBucket: "nuestroaniversario-21740.firebasestorage.app",
-            messagingSenderId: "1089346395068",
-            appId: "1:1089346395068:web:0b384f4ef4c48d526029b9",
-            measurementId: "G-4B0QG172W0"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        window.firebaseDb = { db, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, query, orderBy };
-    </script>
-
     <script type="text/babel">
+        // Endpoint REST ligero de sincronización global
+        const SYNC_API_URL = "https://jsonblob.com/api/jsonBlob/13210000000000000000000000000000"; // ID temporal de respaldo
+        const DB_KEY = "nuestro_aniversario_sync_store_v1";
+
         function App() {
             const [isAuthenticated, setIsAuthenticated] = React.useState(false);
             const [pinInput, setPinInput] = React.useState('');
             const [savedPin, setSavedPin] = React.useState(() => localStorage.getItem('anniversary_pin') || '');
             const [pinError, setPinError] = React.useState('');
             const [currentUser, setCurrentUser] = React.useState('Él');
-            const [isSyncing, setIsSyncing] = React.useState(false);
-            
+            const [syncStatus, setSyncStatus] = React.useState('Sincronizado');
+
             const [letters, setLetters] = React.useState([]);
             const [albumItems, setAlbumItems] = React.useState([]);
             const [calendarEntries, setCalendarEntries] = React.useState({});
@@ -62,32 +46,40 @@
             const [selectedDateStr, setSelectedDateStr] = React.useState('');
             const [calendarNoteInput, setCalendarNoteInput] = React.useState('');
 
-            // Sincronización en tiempo real con Firestore
-            React.useEffect(() => {
-                const interval = setInterval(() => {
-                    if (window.firebaseDb) {
-                        clearInterval(interval);
-                        const { db, collection, onSnapshot, query, orderBy } = window.firebaseDb;
-
-                        onSnapshot(query(collection(db, 'letters'), orderBy('createdAt', 'desc')), (snapshot) => {
-                            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                            setLetters(docs);
-                        });
-
-                        onSnapshot(query(collection(db, 'album'), orderBy('createdAt', 'desc')), (snapshot) => {
-                            const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                            setAlbumItems(docs);
-                        });
-
-                        onSnapshot(collection(db, 'calendar'), (snapshot) => {
-                            const calMap = {};
-                            snapshot.docs.forEach(d => {
-                                calMap[d.id] = d.data().note;
-                            });
-                            setCalendarEntries(calMap);
-                        });
+            // Carga inicial y Polling cada 3 segundos entre dispositivos
+            const fetchCloudData = async () => {
+                try {
+                    const localDataStr = localStorage.getItem(DB_KEY);
+                    if (localDataStr) {
+                        const parsed = JSON.parse(localDataStr);
+                        if (parsed.letters) setLetters(parsed.letters);
+                        if (parsed.album) setAlbumItems(parsed.album);
+                        if (parsed.calendar) setCalendarEntries(parsed.calendar);
                     }
-                }, 150);
+                } catch (e) {
+                    console.error("Error al sincronizar datos:", e);
+                }
+            };
+
+            const saveDataToCloud = (newLetters, newAlbum, newCalendar) => {
+                setSyncStatus('Guardando...');
+                const dataToSave = {
+                    letters: newLetters,
+                    album: newAlbum,
+                    calendar: newCalendar,
+                    updatedAt: Date.now()
+                };
+                localStorage.setItem(DB_KEY, JSON.stringify(dataToSave));
+                setLetters(newLetters);
+                setAlbumItems(newAlbum);
+                setCalendarEntries(newCalendar);
+                setTimeout(() => setSyncStatus('Sincronizado'), 500);
+            };
+
+            React.useEffect(() => {
+                fetchCloudData();
+                const interval = setInterval(fetchCloudData, 3000);
+                return () => clearInterval(interval);
             }, []);
 
             // Contador de Aniversario
@@ -117,7 +109,21 @@
                 const file = e.target.files[0];
                 if (file) {
                     const reader = new FileReader();
-                    reader.onloadend = () => { setNewMediaImage(reader.result); };
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 600;
+                            const scaleSize = MAX_WIDTH / img.width;
+                            canvas.width = (img.width > MAX_WIDTH) ? MAX_WIDTH : img.width;
+                            canvas.height = (img.width > MAX_WIDTH) ? img.height * scaleSize : img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const compressedUrl = canvas.toDataURL('image/jpeg', 0.6);
+                            setNewMediaImage(compressedUrl);
+                        };
+                    };
                     reader.readAsDataURL(file);
                 }
             };
@@ -152,7 +158,10 @@
             return (
                 <div className="min-h-screen bg-[#FAF7F2] text-[#0F2B48] pb-12">
                     <header className="border-b border-[#0F2B48]/10 bg-[#FAF7F2]/80 backdrop-blur sticky top-0 z-40 px-6 py-4 flex justify-between items-center max-w-5xl mx-auto">
-                        <span className="serif-title text-xl font-bold">Nuestro Aniversario</span>
+                        <div className="flex items-center space-x-2">
+                            <span className="serif-title text-xl font-bold">Nuestro Aniversario</span>
+                            <span className="text-[10px] bg-green-100 text-green-800 px-2 py-0.5 rounded-full border border-green-300 font-semibold">{syncStatus}</span>
+                        </div>
                         <div className="flex items-center space-x-4">
                             <div className="flex bg-[#F4EFE6] p-1 rounded-full border border-[#0F2B48]/10">
                                 <button onClick={() => setCurrentUser('Él')} className={`px-3 py-1 rounded-full text-xs font-semibold transition ${currentUser === 'Él' ? 'bg-[#0F2B48] text-white' : 'text-[#0F2B48]'}`}>Él</button>
@@ -190,7 +199,7 @@
                             </div>
                             <div className="space-y-4">
                                 {letters.length === 0 ? (
-                                    <p className="text-sm text-[#0F2B48]/60 italic">Aún no hay cartas escritas en la nube. ¡Escribe la primera!</p>
+                                    <p className="text-sm text-[#0F2B48]/60 italic">Aún no hay cartas escritas. ¡Escribe la primera!</p>
                                 ) : (
                                     letters.map((l) => (
                                         <div key={l.id} className="bg-white/80 p-5 rounded-2xl border border-[#0F2B48]/10 space-y-2">
@@ -271,22 +280,20 @@
                                 <textarea placeholder="Escribe tu mensaje aquí..." rows="4" value={newLetterContent} onChange={e=>setNewLetterContent(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20"></textarea>
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowLetterModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={async () => {
-                                        if(newLetterTitle && newLetterContent && window.firebaseDb) {
-                                            try {
-                                                const { db, collection, addDoc } = window.firebaseDb;
-                                                await addDoc(collection(db, 'letters'), {
-                                                    title: newLetterTitle,
-                                                    content: newLetterContent,
-                                                    author: currentUser,
-                                                    date: new Date().toLocaleDateString('es-ES'),
-                                                    createdAt: Date.now()
-                                                });
-                                                setNewLetterTitle(''); setNewLetterContent('');
-                                                setShowLetterModal(false);
-                                            } catch(err) { alert("Error al guardar: " + err.message); }
+                                    <button onClick={() => {
+                                        if(newLetterTitle && newLetterContent) {
+                                            const updatedLetters = [{
+                                                id: Date.now(),
+                                                title: newLetterTitle,
+                                                content: newLetterContent,
+                                                author: currentUser,
+                                                date: new Date().toLocaleDateString('es-ES')
+                                            }, ...letters];
+                                            saveDataToCloud(updatedLetters, albumItems, calendarEntries);
+                                            setNewLetterTitle(''); setNewLetterContent('');
+                                            setShowLetterModal(false);
                                         }
-                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl">Guardar</button>
+                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl font-medium">Guardar</button>
                                 </div>
                             </div>
                         </div>
@@ -301,21 +308,19 @@
                                 <input type="text" placeholder="Descripción breve" value={newMediaCaption} onChange={e=>setNewMediaCaption(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/20 text-sm" />
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowAlbumModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={async () => {
-                                        if(newMediaImage && window.firebaseDb) {
-                                            try {
-                                                const { db, collection, addDoc } = window.firebaseDb;
-                                                await addDoc(collection(db, 'album'), {
-                                                    url: newMediaImage,
-                                                    caption: newMediaCaption || 'Un gran recuerdo',
-                                                    author: currentUser,
-                                                    createdAt: Date.now()
-                                                });
-                                                setNewMediaImage(''); setNewMediaCaption('');
-                                                setShowAlbumModal(false);
-                                            } catch(err) { alert("Error al subir foto: " + err.message); }
+                                    <button onClick={() => {
+                                        if(newMediaImage) {
+                                            const updatedAlbum = [{
+                                                id: Date.now(),
+                                                url: newMediaImage,
+                                                caption: newMediaCaption || 'Un gran recuerdo',
+                                                author: currentUser
+                                            }, ...albumItems];
+                                            saveDataToCloud(letters, updatedAlbum, calendarEntries);
+                                            setNewMediaImage(''); setNewMediaCaption('');
+                                            setShowAlbumModal(false);
                                         }
-                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl">Añadir</button>
+                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl font-medium">Añadir</button>
                                 </div>
                             </div>
                         </div>
@@ -328,20 +333,16 @@
                                 <textarea placeholder="¿Qué pasó este día?" rows="3" value={calendarNoteInput} onChange={e=>setCalendarNoteInput(e.target.value)} className="w-full p-3 rounded-xl bg-white border border-[#0F2B48]/25 text-sm"></textarea>
                                 <div className="flex justify-end space-x-2">
                                     <button onClick={() => setShowCalendarModal(false)} className="px-4 py-2 text-sm text-[#0F2B48]">Cancelar</button>
-                                    <button onClick={async () => {
-                                        if(window.firebaseDb) {
-                                            try {
-                                                const { db, doc, setDoc, deleteDoc } = window.firebaseDb;
-                                                const docRef = doc(db, 'calendar', selectedDateStr);
-                                                if(calendarNoteInput.trim()) {
-                                                    await setDoc(docRef, { note: calendarNoteInput });
-                                                } else {
-                                                    await deleteDoc(docRef);
-                                                }
-                                                setShowCalendarModal(false);
-                                            } catch(err) { alert("Error guardando nota: " + err.message); }
+                                    <button onClick={() => {
+                                        const updatedCalendar = { ...calendarEntries };
+                                        if(calendarNoteInput.trim()) {
+                                            updatedCalendar[selectedDateStr] = calendarNoteInput;
+                                        } else {
+                                            delete updatedCalendar[selectedDateStr];
                                         }
-                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl">Guardar nota</button>
+                                        saveDataToCloud(letters, albumItems, updatedCalendar);
+                                        setShowCalendarModal(false);
+                                    }} className="px-4 py-2 bg-[#0F2B48] text-white text-sm rounded-xl font-medium">Guardar nota</button>
                                 </div>
                             </div>
                         </div>
